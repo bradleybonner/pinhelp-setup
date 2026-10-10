@@ -106,6 +106,12 @@
   .breaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
   .breaks button { padding: 12px 6px; font-weight: 600; }
   .label { margin: 14px 0 0; font-weight: 600; }
+  .custom { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+  .custom input {
+    width: 100%; font: inherit; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  .custom button { padding: 12px 14px; font-weight: 600; }
   button:disabled { opacity: .5; cursor: default; }
   ol { margin: 0 0 10px; padding-left: 1.3rem; }
   li { margin: 2px 0; }
@@ -152,6 +158,10 @@
       <button data-break="15">15 min</button>
       <button data-break="30">30 min</button>
       <button data-break="60">1 hour</button>
+    </div>
+    <div class="custom">
+      <input type="number" id="breakMin" min="1" max="1440" step="1" inputmode="numeric" placeholder="Other: minutes" aria-label="Break length in minutes">
+      <button id="breakGo">Start break</button>
     </div>
     <div id="toast" role="status"></div>
     <p class="muted sub">Tip: tap Share → <b>Add to Home Screen</b> to come back here in one tap. Check-ins last 12 hours.</p>
@@ -278,6 +288,13 @@
     return { on: names.length > 0, text };
   }
 
+  // "45-minute", "2-hour", "1 h 30 min"
+  function duration(minutes) {
+    if (minutes < 60) return `${minutes}-minute`;
+    if (minutes % 60 === 0) return `${minutes / 60}-hour`;
+    return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+  }
+
   function clock(unix) {
     return new Date(unix * 1000).toLocaleTimeString("en-US", {
       hour: "numeric", minute: "2-digit", timeZone: SHOW_TIMEZONE, timeZoneName: "short",
@@ -387,6 +404,7 @@
     $("on").disabled = $("off").disabled = true;
     const body = JSON.stringify(minutes ? { cmd, who, minutes } : { cmd, who });
     document.querySelectorAll(".breaks button").forEach((b) => (b.disabled = true));
+    $("breakGo").disabled = true;
     const results = await Promise.allSettled(list.map((m) =>
       fetch(`${server}/${encodeURIComponent(m.reply)}`, { method: "POST", body }).then((r) => {
         if (!r.ok) throw new Error(r.status);
@@ -394,8 +412,9 @@
     const failed = results.filter((r) => r.status === "rejected").length;
     $("on").disabled = $("off").disabled = false;
     document.querySelectorAll(".breaks button").forEach((b) => (b.disabled = false));
+    $("breakGo").disabled = false;
     if (failed) toast(`Couldn't reach ${failed} of ${list.length} machine(s). Check your connection and try again.`, true);
-    else if (minutes) toast(`On a ${minutes >= 60 ? minutes / 60 + "-hour" : minutes + "-minute"} break for ${list.length} machine(s). You'll be back on duty at ${clock(Date.now() / 1000 + minutes * 60)}.`);
+    else if (minutes) toast(`On a ${duration(minutes)} break for ${list.length} machine(s). You'll be back on duty at ${clock(Date.now() / 1000 + minutes * 60)}.`);
     else toast(cmd === "on" ? `You're on duty for ${list.length} machine(s).` : `You're off duty for ${list.length} machine(s).`);
     // ntfy.sh takes about a second before new messages show up in a poll.
     for (const m of list) statusById[m.id] = { on: cmd === "on", text: "Updating…" };
@@ -410,6 +429,21 @@
   $("off").addEventListener("click", () => setDuty("off"));
   document.querySelectorAll(".breaks button").forEach((b) =>
     b.addEventListener("click", () => setDuty("off", Number(b.dataset.break))));
+
+  // Any length from 1 minute to 24 hours (the device and relay accept 1–1440).
+  function customBreak() {
+    const raw = $("breakMin").value.trim();
+    const minutes = Number(raw);
+    if (!raw || !Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
+      toast("Enter a whole number of minutes, from 1 to 1440 (24 hours).", true);
+      $("breakMin").focus();
+      return;
+    }
+    $("breakMin").value = "";
+    return setDuty("off", minutes);
+  }
+  $("breakGo").addEventListener("click", customBreak);
+  $("breakMin").addEventListener("keydown", (e) => { if (e.key === "Enter") customBreak(); });
 
   async function loadDirectory() {
     if (!show) { renderMachines(); renderTopics(); return; }
