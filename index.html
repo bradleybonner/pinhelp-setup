@@ -156,6 +156,9 @@
   const NAME_MAX = 20;          // roster names
   const MACHINE_NAME_MAX = 32;
   const ROSTER_TTL_S = 12 * 3600;
+  // The show's time zone (Chicago), whatever zone the phone is set to. Keep in
+  // step with TZ_INFO in firmware/include/config.h and the relay.
+  const SHOW_TIMEZONE = "America/Chicago";
   const params = new URLSearchParams(location.search);
 
   const store = {
@@ -248,7 +251,9 @@
     }
     const now = Date.now() / 1000;
     if (override && override.type === "away" && (!override.until || now < override.until)) {
-      const at = override.until ? new Date(override.until * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      const at = override.until ? new Date(override.until * 1000).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", timeZone: SHOW_TIMEZONE, timeZoneName: "short",
+      }) : "";
       return { on: false, text: at ? `Away until ${at}` : "Away (override)" };
     }
     if (override && override.type === "back") return { on: true, text: "Available (override)" };
