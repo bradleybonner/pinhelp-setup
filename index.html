@@ -103,6 +103,9 @@
   .duty { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   #on { background: var(--accent); color: var(--accent-text); }
   #off { background: var(--away-soft); color: var(--away); }
+  .breaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .breaks button { padding: 12px 6px; font-weight: 600; }
+  .label { margin: 14px 0 0; font-weight: 600; }
   button:disabled { opacity: .5; cursor: default; }
   ol { margin: 0 0 10px; padding-left: 1.3rem; }
   li { margin: 2px 0; }
@@ -143,6 +146,12 @@
     <div class="duty">
       <button class="big" id="on">I'm on duty</button>
       <button class="big" id="off">I'm off duty</button>
+    </div>
+    <p class="label">Take a break <span class="muted">(back on duty automatically)</span></p>
+    <div class="breaks">
+      <button data-break="15">15 min</button>
+      <button data-break="30">30 min</button>
+      <button data-break="60">1 hour</button>
     </div>
     <div id="toast" role="status"></div>
     <p class="muted sub">Tip: tap Share → <b>Add to Home Screen</b> to come back here in one tap. Check-ins last 12 hours.</p>
@@ -223,7 +232,12 @@
       const body = JSON.parse(text);
       if (body && (body.cmd === "on" || body.cmd === "off") && typeof body.who === "string") {
         const who = normalizeName(body.who);
-        if (who) return { type: body.cmd, who, time: ev.time };
+        if (who) {
+          // "off" with minutes is a break: back on duty automatically afterwards.
+          const m = body.minutes;
+          const breakUntil = body.cmd === "off" && Number.isInteger(m) && m >= 1 && m <= 1440 ? ev.time + m * 60 : 0;
+          return { type: body.cmd, who, time: ev.time, breakUntil };
+        }
       }
     } catch {}
     const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -245,20 +259,29 @@
       else if (c.type === "back") override = { type: "back" };
       else {
         override = null;
-        if (c.type === "on") roster.set(c.who.toLowerCase(), { name: c.who, since: c.time });
-        else roster.delete(c.who.toLowerCase());
+        if (c.type === "on" || c.breakUntil) {
+          roster.set(c.who.toLowerCase(), { name: c.who, since: c.time, breakUntil: c.breakUntil || 0 });
+        } else roster.delete(c.who.toLowerCase());
       }
     }
     const now = Date.now() / 1000;
     if (override && override.type === "away" && (!override.until || now < override.until)) {
-      const at = override.until ? new Date(override.until * 1000).toLocaleTimeString("en-US", {
-        hour: "numeric", minute: "2-digit", timeZone: SHOW_TIMEZONE, timeZoneName: "short",
-      }) : "";
+      const at = override.until ? clock(override.until) : "";
       return { on: false, text: at ? `Away until ${at}` : "Away (override)" };
     }
     if (override && override.type === "back") return { on: true, text: "Available (override)" };
-    const names = [...roster.values()].filter((r) => now - r.since < ROSTER_TTL_S).map((r) => r.name);
-    return names.length ? { on: true, text: "On duty: " + names.join(", ") } : { on: false, text: "Nobody on duty" };
+    const current = [...roster.values()].filter((r) => now - r.since < ROSTER_TTL_S);
+    const names = current.filter((r) => !(r.breakUntil > now)).map((r) => r.name);
+    const breaks = current.filter((r) => r.breakUntil > now).map((r) => `${r.name} until ${clock(r.breakUntil)}`);
+    let text = names.length ? "On duty: " + names.join(", ") : "Nobody on duty";
+    if (breaks.length) text += " · Break: " + breaks.join(", ");
+    return { on: names.length > 0, text };
+  }
+
+  function clock(unix) {
+    return new Date(unix * 1000).toLocaleTimeString("en-US", {
+      hour: "numeric", minute: "2-digit", timeZone: SHOW_TIMEZONE, timeZoneName: "short",
+    });
   }
 
   async function refreshStatus(m) {
@@ -354,7 +377,7 @@
     t.className = isError ? "error" : "";
   }
 
-  async function setDuty(cmd) {
+  async function setDuty(cmd, minutes) {
     const who = normalizeName(nameInput.value);
     const list = chosen();
     if (!who) { toast("Enter your name first.", true); nameInput.focus(); return; }
@@ -362,17 +385,21 @@
     store.set("name", who);
     nameInput.value = who;
     $("on").disabled = $("off").disabled = true;
-    const body = JSON.stringify({ cmd, who });
+    const body = JSON.stringify(minutes ? { cmd, who, minutes } : { cmd, who });
+    document.querySelectorAll(".breaks button").forEach((b) => (b.disabled = true));
     const results = await Promise.allSettled(list.map((m) =>
       fetch(`${server}/${encodeURIComponent(m.reply)}`, { method: "POST", body }).then((r) => {
         if (!r.ok) throw new Error(r.status);
       })));
     const failed = results.filter((r) => r.status === "rejected").length;
     $("on").disabled = $("off").disabled = false;
+    document.querySelectorAll(".breaks button").forEach((b) => (b.disabled = false));
     if (failed) toast(`Couldn't reach ${failed} of ${list.length} machine(s). Check your connection and try again.`, true);
+    else if (minutes) toast(`On a ${minutes >= 60 ? minutes / 60 + "-hour" : minutes + "-minute"} break for ${list.length} machine(s). You'll be back on duty at ${clock(Date.now() / 1000 + minutes * 60)}.`);
     else toast(cmd === "on" ? `You're on duty for ${list.length} machine(s).` : `You're off duty for ${list.length} machine(s).`);
     // ntfy.sh takes about a second before new messages show up in a poll.
     for (const m of list) statusById[m.id] = { on: cmd === "on", text: "Updating…" };
+    // (a break shows as on break once the refresh below lands)
     renderMachines();
     await new Promise((r) => setTimeout(r, 3000));
     await Promise.all(list.map(refreshStatus));
@@ -381,6 +408,8 @@
 
   $("on").addEventListener("click", () => setDuty("on"));
   $("off").addEventListener("click", () => setDuty("off"));
+  document.querySelectorAll(".breaks button").forEach((b) =>
+    b.addEventListener("click", () => setDuty("off", Number(b.dataset.break))));
 
   async function loadDirectory() {
     if (!show) { renderMachines(); renderTopics(); return; }
