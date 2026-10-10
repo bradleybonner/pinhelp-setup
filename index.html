@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Help buttons">
+<title>Help Button Setup</title>
+<style>
+  :root {
+    --bg: #f6f7f5;
+    --card: #ffffff;
+    --text: #1d221f;
+    --muted: #5d6762;
+    --line: #dde2de;
+    --accent: #0b6b3a;
+    --accent-text: #ffffff;
+    --away: #b25a00;
+    --away-soft: #fbeedd;
+    --on-soft: #e3f3e9;
+    --danger: #a12b2b;
+    --code: #eef1ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121513;
+      --card: #1b201d;
+      --text: #e9eeea;
+      --muted: #9ba7a0;
+      --line: #2c332f;
+      --accent: #3fae6e;
+      --accent-text: #08130c;
+      --away: #f0a04b;
+      --away-soft: #33261a;
+      --on-soft: #183022;
+      --danger: #ef7d7d;
+      --code: #232a26;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121513; --card: #1b201d; --text: #e9eeea; --muted: #9ba7a0; --line: #2c332f;
+    --accent: #3fae6e; --accent-text: #08130c; --away: #f0a04b; --away-soft: #33261a;
+    --on-soft: #183022; --danger: #ef7d7d; --code: #232a26;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 34rem; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 4px 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 20px; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    margin: 0 0 14px;
+  }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; display: flex; gap: 10px; align-items: center; }
+  .step {
+    flex: none; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-text);
+    display: grid; place-items: center; font-size: .85rem; font-weight: 700;
+  }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--muted); font-size: .92rem; }
+  input[type=text] {
+    width: 100%; font: inherit; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  .machine {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 0; border-top: 1px solid var(--line);
+  }
+  .machine:first-of-type { border-top: 0; padding-top: 2px; }
+  .machine input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+  .machine label { flex: 1; min-width: 0; cursor: pointer; }
+  .mname { font-weight: 650; }
+  .chip {
+    display: inline-block; margin-top: 4px; padding: 2px 9px; border-radius: 999px;
+    font-size: .82rem; background: var(--away-soft); color: var(--away);
+  }
+  .chip.on { background: var(--on-soft); color: var(--accent); }
+  .topic {
+    display: flex; gap: 8px; align-items: center; margin: 8px 0 4px;
+  }
+  .topic code {
+    flex: 1; min-width: 0; overflow-wrap: anywhere;
+    background: var(--code); padding: 8px 10px; border-radius: 8px; font-size: .9rem;
+  }
+  button {
+    font: inherit; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); padding: 8px 12px; cursor: pointer;
+  }
+  button.big {
+    width: 100%; padding: 16px; font-size: 1.1rem; font-weight: 650; border: 0;
+  }
+  .duty { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #on { background: var(--accent); color: var(--accent-text); }
+  #off { background: var(--away-soft); color: var(--away); }
+  button:disabled { opacity: .5; cursor: default; }
+  ol { margin: 0 0 10px; padding-left: 1.3rem; }
+  li { margin: 2px 0; }
+  a { color: var(--accent); }
+  #toast { min-height: 1.4em; margin-top: 10px; font-size: .95rem; }
+  .error { color: var(--danger); }
+  .sub { margin-top: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Help button setup</h1>
+  <p class="lede">Get notified when players at the machines you cover ask for help, and tell the buttons when you're on duty.</p>
+
+  <section>
+    <h2><span class="step">1</span>Your name</h2>
+    <input type="text" id="name" maxlength="20" autocomplete="name" placeholder="e.g. Sam">
+    <p class="muted sub">Shows who's on duty. Remembered on this phone.</p>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span>Machines you'll cover</h2>
+    <div id="machines"><p class="muted">Loading machines…</p></div>
+  </section>
+
+  <section>
+    <h2><span class="step">3</span>Get the notifications</h2>
+    <ol>
+      <li>Install <a href="https://apps.apple.com/app/ntfy/id1625396347">ntfy</a> (iPhone) or <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy">ntfy</a> (Android) and allow notifications.</li>
+      <li>In ntfy tap <b>+</b>, paste a topic below, and subscribe. Do this for each machine.</li>
+    </ol>
+    <div id="topics"><p class="muted">Pick at least one machine above.</p></div>
+  </section>
+
+  <section>
+    <h2><span class="step">4</span>Duty</h2>
+    <p class="muted">A machine says "Help is away" and saves reports only while nobody is on duty for it.</p>
+    <div class="duty">
+      <button class="big" id="on">I'm on duty</button>
+      <button class="big" id="off">I'm off duty</button>
+    </div>
+    <div id="toast" role="status"></div>
+    <p class="muted sub">Tip: tap Share → <b>Add to Home Screen</b> to come back here in one tap. Check-ins last 12 hours.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  // Command formats and rules must match the firmware (firmware/src/wifi_ntfy.cpp,
+  // app.cpp) and the relay (relay/src/shaolin_relay/ntfy.py).
+  const NAME_MAX = 20;
+  const ROSTER_TTL_S = 12 * 3600;
+  const params = new URLSearchParams(location.search);
+
+  const store = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem("pinhelp." + key); return v === null ? fallback : JSON.parse(v); }
+      catch { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem("pinhelp." + key, JSON.stringify(value)); } catch {}
+    },
+  };
+
+  const server = (params.get("srv") || store.get("srv", "https://ntfy.sh")).replace(/\/+$/, "");
+  const show = params.get("show") || store.get("show", "");
+  store.set("srv", server);
+  if (show) store.set("show", show);
+
+  let machines = [];                                // directory entries, newest per id
+  let selected = new Set(store.get("selected", []));
+  if (params.get("m")) selected.add(params.get("m"));
+  const statusById = {};
+
+  const $ = (id) => document.getElementById(id);
+  const nameInput = $("name");
+  nameInput.value = store.get("name", "");
+  nameInput.addEventListener("input", () => store.set("name", nameInput.value));
+
+  function normalizeName(name) {
+    return name.split(/\s+/).filter(Boolean).join(" ").slice(0, NAME_MAX).trim();
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  async function poll(topic) {
+    const r = await fetch(`${server}/${encodeURIComponent(topic)}/json?poll=1&since=12h`);
+    if (!r.ok) throw new Error(`ntfy ${r.status}`);
+    const text = await r.text();
+    return text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)).filter((e) => e.event === "message");
+  }
+
+  // ---- availability (same rules as the device) -----------------------------
+  function parseAvailability(ev) {
+    const text = ev.message || "";
+    try {
+      const body = JSON.parse(text);
+      if (body && (body.cmd === "on" || body.cmd === "off") && typeof body.who === "string") {
+        const who = normalizeName(body.who);
+        if (who) return { type: body.cmd, who, time: ev.time };
+      }
+    } catch {}
+    const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 1 && words[0] === "back") return { type: "back", time: ev.time };
+    if (words[0] === "away" && words.length === 1) return { type: "away", until: 0, time: ev.time };
+    if (words[0] === "away" && words.length === 2 && /^\d{1,4}$/.test(words[1])) {
+      const min = Number(words[1]);
+      if (min >= 1 && min <= 1440) return { type: "away", until: ev.time + min * 60, time: ev.time };
+    }
+    return null;
+  }
+
+  function availability(events) {
+    const cmds = events.map(parseAvailability).filter(Boolean).sort((a, b) => a.time - b.time);
+    let override = null;
+    const roster = new Map(); // lowercased name -> {name, since}
+    for (const c of cmds) {
+      if (c.type === "away") override = { type: "away", until: c.until };
+      else if (c.type === "back") override = { type: "back" };
+      else {
+        override = null;
+        if (c.type === "on") roster.set(c.who.toLowerCase(), { name: c.who, since: c.time });
+        else roster.delete(c.who.toLowerCase());
+      }
+    }
+    const now = Date.now() / 1000;
+    if (override && override.type === "away" && (!override.until || now < override.until)) {
+      const at = override.until ? new Date(override.until * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      return { on: false, text: at ? `Away until ${at}` : "Away (override)" };
+    }
+    if (override && override.type === "back") return { on: true, text: "Available (override)" };
+    const names = [...roster.values()].filter((r) => now - r.since < ROSTER_TTL_S).map((r) => r.name);
+    return names.length ? { on: true, text: "On duty: " + names.join(", ") } : { on: false, text: "Nobody on duty" };
+  }
+
+  async function refreshStatus(m) {
+    try { statusById[m.id] = availability(await poll(m.reply)); }
+    catch { statusById[m.id] = { on: false, text: "Status unavailable" }; }
+  }
+
+  // ---- rendering ----------------------------------------------------------
+  function renderMachines() {
+    const box = $("machines");
+    if (!show) {
+      box.innerHTML = '<p class="error">Open this page by scanning the QR code on a help button (Setup → Phone setup).</p>';
+      return;
+    }
+    if (!machines.length) {
+      box.innerHTML = '<p class="muted">No machines found yet. Buttons list themselves once they are online.</p>';
+      return;
+    }
+    box.innerHTML = machines.map((m) => {
+      const st = statusById[m.id];
+      const chip = st ? `<span class="chip ${st.on ? "on" : ""}">${escapeHtml(st.text)}</span>` : "";
+      return `<div class="machine">
+        <input type="checkbox" id="m-${m.id}" data-id="${m.id}" ${selected.has(m.id) ? "checked" : ""}>
+        <label for="m-${m.id}"><div class="mname">${escapeHtml(m.name)}</div>${chip}</label>
+      </div>`;
+    }).join("");
+    box.querySelectorAll("input[type=checkbox]").forEach((cb) => cb.addEventListener("change", () => {
+      cb.checked ? selected.add(cb.dataset.id) : selected.delete(cb.dataset.id);
+      store.set("selected", [...selected]);
+      renderTopics();
+    }));
+  }
+
+  function chosen() {
+    return machines.filter((m) => selected.has(m.id));
+  }
+
+  function renderTopics() {
+    const box = $("topics");
+    const list = chosen();
+    if (!list.length) {
+      box.innerHTML = '<p class="muted">Pick at least one machine above.</p>';
+      return;
+    }
+    box.innerHTML = list.map((m) => `<div>
+        <div class="mname">${escapeHtml(m.name)}</div>
+        <div class="topic"><code>${escapeHtml(m.help)}</code><button data-copy="${escapeHtml(m.help)}">Copy</button></div>
+        <p class="muted"><a href="${server}/${encodeURIComponent(m.help)}" target="_blank" rel="noopener">Or open in the ntfy web app</a></p>
+      </div>`).join("");
+    box.querySelectorAll("button[data-copy]").forEach((b) => b.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied"; }
+      catch { b.textContent = "Select & copy"; }
+      setTimeout(() => (b.textContent = "Copy"), 2000);
+    }));
+  }
+
+  function toast(text, isError) {
+    const t = $("toast");
+    t.textContent = text;
+    t.className = isError ? "error" : "";
+  }
+
+  async function setDuty(cmd) {
+    const who = normalizeName(nameInput.value);
+    const list = chosen();
+    if (!who) { toast("Enter your name first.", true); nameInput.focus(); return; }
+    if (!list.length) { toast("Pick at least one machine.", true); return; }
+    store.set("name", who);
+    nameInput.value = who;
+    $("on").disabled = $("off").disabled = true;
+    const body = JSON.stringify({ cmd, who });
+    const results = await Promise.allSettled(list.map((m) =>
+      fetch(`${server}/${encodeURIComponent(m.reply)}`, { method: "POST", body }).then((r) => {
+        if (!r.ok) throw new Error(r.status);
+      })));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    $("on").disabled = $("off").disabled = false;
+    if (failed) toast(`Couldn't reach ${failed} of ${list.length} machine(s). Check your connection and try again.`, true);
+    else toast(cmd === "on" ? `You're on duty for ${list.length} machine(s).` : `You're off duty for ${list.length} machine(s).`);
+    // ntfy.sh takes about a second before new messages show up in a poll.
+    for (const m of list) statusById[m.id] = { on: cmd === "on", text: "Updating…" };
+    renderMachines();
+    await new Promise((r) => setTimeout(r, 3000));
+    await Promise.all(list.map(refreshStatus));
+    renderMachines();
+  }
+
+  $("on").addEventListener("click", () => setDuty("on"));
+  $("off").addEventListener("click", () => setDuty("off"));
+
+  async function loadDirectory() {
+    if (!show) { renderMachines(); renderTopics(); return; }
+    try {
+      const byId = new Map();
+      for (const ev of await poll(show)) {
+        try {
+          const e = JSON.parse(ev.message);
+          if (e && e.v === 1 && e.id && e.help && e.reply) byId.set(e.id, { ...e, time: ev.time });
+        } catch {}
+      }
+      machines = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+      renderMachines();
+      renderTopics();
+      await Promise.all(machines.map(refreshStatus));
+      renderMachines();
+    } catch {
+      $("machines").innerHTML = '<p class="error">Couldn\'t load the machine list. Check your connection and reload.</p>';
+    }
+  }
+
+  loadDirectory();
+  setInterval(async () => { await Promise.all(machines.map(refreshStatus)); renderMachines(); }, 30000);
+})();
+</script>
+</body>
+</html>
