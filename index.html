@@ -79,6 +79,7 @@
   .machine:first-of-type { border-top: 0; padding-top: 2px; }
   .machine input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--accent); flex: none; }
   .machine label { flex: 1; min-width: 0; cursor: pointer; }
+  .machine .rename { flex: none; font-size: .85rem; padding: 6px 10px; color: var(--muted); }
   .mname { font-weight: 650; }
   .chip {
     display: inline-block; margin-top: 4px; padding: 2px 9px; border-radius: 999px;
@@ -152,7 +153,8 @@
 (() => {
   // Command formats and rules must match the firmware (firmware/src/wifi_ntfy.cpp,
   // app.cpp) and the relay (relay/src/shaolin_relay/ntfy.py).
-  const NAME_MAX = 20;
+  const NAME_MAX = 20;          // roster names
+  const MACHINE_NAME_MAX = 32;
   const ROSTER_TTL_S = 12 * 3600;
   const params = new URLSearchParams(location.search);
 
@@ -181,8 +183,23 @@
   nameInput.value = store.get("name", "");
   nameInput.addEventListener("input", () => store.set("name", nameInput.value));
 
-  function normalizeName(name) {
-    return name.split(/\s+/).filter(Boolean).join(" ").slice(0, NAME_MAX).trim();
+  function normalizeName(name, limit = NAME_MAX) {
+    return name.split(/\s+/).filter(Boolean).join(" ").slice(0, limit).trim();
+  }
+
+  // {"cmd":"rename","name":...} on a machine's reply topic: the newest one wins.
+  function latestRename(events) {
+    let found = null;
+    for (const ev of events) {
+      try {
+        const body = JSON.parse(ev.message || "");
+        if (body && body.cmd === "rename" && typeof body.name === "string") {
+          const name = normalizeName(body.name, MACHINE_NAME_MAX);
+          if (name && (!found || ev.time >= found.time)) found = { name, time: ev.time };
+        }
+      } catch {}
+    }
+    return found;
   }
 
   function escapeHtml(s) {
@@ -240,8 +257,36 @@
   }
 
   async function refreshStatus(m) {
-    try { statusById[m.id] = availability(await poll(m.reply)); }
-    catch { statusById[m.id] = { on: false, text: "Status unavailable" }; }
+    try {
+      const events = await poll(m.reply);
+      statusById[m.id] = availability(events);
+      // A rename the button hasn't announced yet (e.g. it's offline) still shows here.
+      const rn = latestRename(events);
+      if (rn && rn.time >= m.time) m.name = rn.name;
+    } catch {
+      statusById[m.id] = { on: false, text: "Status unavailable" };
+    }
+  }
+
+  async function renameMachine(m) {
+    const input = prompt(`New name for "${m.name}"`, m.name);
+    if (input === null) return;
+    const name = normalizeName(input, MACHINE_NAME_MAX);
+    if (!name || name === m.name) return;
+    try {
+      const r = await fetch(`${server}/${encodeURIComponent(m.reply)}`, {
+        method: "POST",
+        body: JSON.stringify({ cmd: "rename", name }),
+      });
+      if (!r.ok) throw new Error(r.status);
+      m.name = name;
+      m.time = Date.now() / 1000;
+      toast(`Renamed to "${name}". The button updates as soon as it's online.`);
+      renderMachines();
+      renderTopics();
+    } catch {
+      toast("Couldn't rename. Check your connection and try again.", true);
+    }
   }
 
   // ---- rendering ----------------------------------------------------------
@@ -261,8 +306,13 @@
       return `<div class="machine">
         <input type="checkbox" id="m-${m.id}" data-id="${m.id}" ${selected.has(m.id) ? "checked" : ""}>
         <label for="m-${m.id}"><div class="mname">${escapeHtml(m.name)}</div>${chip}</label>
+        <button class="rename" data-rename="${m.id}">Rename</button>
       </div>`;
     }).join("");
+    box.querySelectorAll("button[data-rename]").forEach((b) => b.addEventListener("click", () => {
+      const m = machines.find((x) => x.id === b.dataset.rename);
+      if (m) renameMachine(m);
+    }));
     box.querySelectorAll("input[type=checkbox]").forEach((cb) => cb.addEventListener("change", () => {
       cb.checked ? selected.add(cb.dataset.id) : selected.delete(cb.dataset.id);
       store.set("selected", [...selected]);
