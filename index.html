@@ -486,7 +486,7 @@
   // directly. Unlocked once per phone (the hash is kept in localStorage);
   // changing PASSWORD_HASH asks everyone again. To make a hash:
   //   printf '%s' 'pinhelp:<password>' | sha256sum
-  const PASSWORD_HASH = "69109b5ff3b438ac75e190a9acab49726634e0a6fbd1626f29af365ff8ec0fc3";  // placeholder: "changeme"
+  const PASSWORD_HASH = "fbc78119b67ca6b0b18d4d80c39a866df145a42fc5e62a0f28f69acea8450dcc";
 
   async function hashPassword(pw) {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("pinhelp:" + pw));
