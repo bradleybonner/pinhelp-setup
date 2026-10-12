@@ -119,10 +119,26 @@
   #toast { min-height: 1.4em; margin-top: 10px; font-size: .95rem; }
   .error { color: var(--danger); }
   .sub { margin-top: 14px; }
+  #gate form { display: grid; gap: 10px; }
+  #gate input { width: 100%; font: inherit; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  #gate button { background: var(--accent); color: var(--accent-text); }
 </style>
 </head>
 <body>
-<main>
+<main id="gate" hidden>
+  <h1>Help button setup</h1>
+  <section>
+    <form id="gateForm">
+      <label for="gatePw">Staff password</label>
+      <input type="password" id="gatePw" autocomplete="current-password" required>
+      <button class="big" type="submit">Unlock</button>
+      <p id="gateErr" class="error" role="alert"></p>
+    </form>
+    <p class="muted">Asked once per phone.</p>
+  </section>
+</main>
+<main id="app" hidden>
   <h1>Help button setup</h1>
   <p class="lede">Get notified when players at the machines you cover ask for help, and tell the buttons when you're on duty.</p>
 
@@ -465,8 +481,42 @@
     }
   }
 
-  loadDirectory();
-  setInterval(async () => { await Promise.all(machines.map(refreshStatus)); renderMachines(); }, 30000);
+  // Staff password, checked in the page only. It keeps out a curious player who
+  // scans the QR code, not anyone who reads the page source or posts to ntfy
+  // directly. Unlocked once per phone (the hash is kept in localStorage);
+  // changing PASSWORD_HASH asks everyone again. To make a hash:
+  //   printf '%s' 'pinhelp:<password>' | sha256sum
+  const PASSWORD_HASH = "69109b5ff3b438ac75e190a9acab49726634e0a6fbd1626f29af365ff8ec0fc3";  // placeholder: "changeme"
+
+  async function hashPassword(pw) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("pinhelp:" + pw));
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function start() {
+    $("gate").hidden = true;
+    $("app").hidden = false;
+    loadDirectory();
+    setInterval(async () => { await Promise.all(machines.map(refreshStatus)); renderMachines(); }, 30000);
+  }
+
+  if (store.get("auth", "") === PASSWORD_HASH) {
+    start();
+  } else {
+    $("gate").hidden = false;
+    $("gatePw").focus();
+    $("gateForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const hash = await hashPassword($("gatePw").value);
+      if (hash !== PASSWORD_HASH) {
+        $("gateErr").textContent = "Wrong password.";
+        $("gatePw").select();
+        return;
+      }
+      store.set("auth", hash);
+      start();
+    });
+  }
 })();
 </script>
 </body>
